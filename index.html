@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ELITE Tracker</title>
+    <style>
+        :root {
+            --bg: #0a0f1e; --card: #161e2d; --accent: #00f2ff; --text: #ffffff; 
+            --muted: #64748b; --danger: #ef4444; --success: #10b981;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica; background: var(--bg); color: var(--text); margin: 0; padding: 15px; padding-bottom: 100px; }
+        h1 { font-size: 20px; text-align: center; letter-spacing: 2px; color: var(--accent); margin-bottom: 20px; text-transform: uppercase; }
+        
+        .nav { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 20px; padding-bottom: 10px; -webkit-overflow-scrolling: touch; }
+        .nav button { background: var(--card); border: 1px solid #2d3748; color: var(--muted); padding: 12px 18px; border-radius: 10px; white-space: nowrap; font-weight: 600; transition: 0.3s; }
+        .nav button.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
+        .card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 16px; border: 1px solid #2d3748; }
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 15px; }
+        .ex-name { font-size: 18px; font-weight: 700; color: var(--accent); display: block; }
+        .ex-tip { font-size: 11px; color: var(--muted); margin-top: 4px; line-height: 1.3; }
+
+        .set-row { display: grid; grid-template-columns: 30px 1fr 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+        .set-num { font-size: 12px; color: var(--muted); font-weight: bold; }
+        input { background: #0a0f1e; border: 1px solid #2d3748; color: white; padding: 10px; border-radius: 8px; width: 100%; box-sizing: border-box; font-size: 16px; text-align: center; }
+        input::placeholder { color: #334155; font-size: 12px; }
+
+        .controls { display: flex; gap: 10px; margin-top: 15px; border-top: 1px solid #2d3748; padding-top: 15px; }
+        .btn-set { flex: 1; padding: 8px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; font-size: 14px; }
+        .btn-add { background: #1e293b; color: var(--accent); border: 1px solid var(--accent); }
+        .btn-rem { background: #1e293b; color: var(--danger); border: 1px solid var(--danger); }
+
+        .footer-save { position: fixed; bottom: 20px; left: 20px; right: 20px; background: var(--accent); color: var(--bg); border: none; padding: 18px; border-radius: 15px; font-size: 18px; font-weight: 800; box-shadow: 0 10px 20px rgba(0,242,255,0.3); }
+    </style>
+</head>
+<body>
+
+<h1>Elite 4-Day Split</h1>
+
+<div class="nav" id="dayNav">
+    <button onclick="switchDay('PullA')" id="btnPullA">MON: PULL A</button>
+    <button onclick="switchDay('PushA')" id="btnPushA">WED: PUSH A</button>
+    <button onclick="switchDay('PullB')" id="btnPullB">FRI: PULL B</button>
+    <button onclick="switchDay('PushB')" id="btnPushB">SAT: PUSH B</button>
+</div>
+
+<div id="workoutArea"></div>
+
+<button class="footer-save" onclick="saveAll()">SAVE SESSION PROGRESS</button>
+
+<script>
+    const exercises = {
+        PullA: [
+            { n: "Romanian Deadlift", t: "Hinge at hips. Feel the stretch." },
+            { n: "Lat Pulldown", t: "Drive elbows to floor." },
+            { n: "Seated Cable Row", t: "Squeeze shoulder blades." },
+            { n: "Face Pulls", t: "Pull to forehead, thumbs back." },
+            { n: "Bicep Curls", t: "Keep elbows glued to ribs." }
+        ],
+        PushA: [
+            { n: "Goblet Squat", t: "Heels elevated. Deep stretch." },
+            { n: "Flat DB Bench", t: "45-degree elbow tuck." },
+            { n: "Overhead Press", t: "Squeeze glutes. Press high." },
+            { n: "Lateral Raise", t: "Lead with elbows." },
+            { n: "Tricep Pushdown", t: "Lock elbows at sides." }
+        ],
+        PullB: [
+            { n: "Lying Leg Curl", t: "Hips down. Controlled eccentric." },
+            { n: "Single Arm Row", t: "Pull to hip pocket." },
+            { n: "Assisted Pull-Up", t: "Full range. Chin over bar." },
+            { n: "Reverse Fly", t: "Rear delts focus." },
+            { n: "Hammer Curls", t: "Neutral grip. Peak power." }
+        ],
+        PushB: [
+            { n: "Walking Lunges", t: "Big steps. Front heel drive." },
+            { n: "Incline DB Press", t: "30-degree incline. Upper chest." },
+            { n: "Push-Ups", t: "Chest to floor. Explosive up." },
+            { n: "Cable Lateral Raise", t: "Constant side delt tension." },
+            { n: "Overhead Tricep Ext", t: "Deep stretch behind head." }
+        ]
+    };
+
+    let currentDay = 'PullA';
+    // State stores: { 'PullA_0': set_count }
+    let setCounts = JSON.parse(localStorage.getItem('setCounts')) || {};
+
+    function switchDay(day) {
+        currentDay = day;
+        document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById('btn' + day).classList.add('active');
+        render();
+    }
+
+    function render() {
+        const area = document.getElementById('workoutArea');
+        area.innerHTML = '';
+
+        exercises[currentDay].forEach((ex, idx) => {
+            const key = `${currentDay}_${idx}`;
+            const count = setCounts[key] || 3; // Default 3 sets
+            
+            let setHtml = '';
+            for(let i=0; i < count; i++) {
+                const w = localStorage.getItem(`${key}_s${i}_w`) || "";
+                const r = localStorage.getItem(`${key}_s${i}_r`) || "";
+                setHtml += `
+                    <div class="set-row">
+                        <span class="set-num">${i+1}</span>
+                        <input type="number" id="${key}_s${i}_w" value="${w}" placeholder="Weight">
+                        <input type="number" id="${key}_s${i}_r" value="${r}" placeholder="Reps">
+                    </div>
+                `;
+            }
+
+            area.innerHTML += `
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <span class="ex-name">${ex.n}</span>
+                            <div class="ex-tip">${ex.t}</div>
+                        </div>
+                    </div>
+                    <div id="sets_${key}">${setHtml}</div>
+                    <div class="controls">
+                        <button class="btn-set btn-rem" onclick="modifySet('${key}', -1)">− REMOVE SET</button>
+                        <button class="btn-set btn-add" onclick="modifySet('${key}', 1)">+ ADD SET</button>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    function modifySet(key, change) {
+        let current = setCounts[key] || 3;
+        let next = current + change;
+        if(next < 1) return;
+        setCounts[key] = next;
+        localStorage.setItem('setCounts', JSON.stringify(setCounts));
+        render();
+    }
+
+    function saveAll() {
+        exercises[currentDay].forEach((ex, idx) => {
+            const key = `${currentDay}_${idx}`;
+            const count = setCounts[key] || 3;
+            for(let i=0; i < count; i++) {
+                const w = document.getElementById(`${key}_s${i}_w`).value;
+                const r = document.getElementById(`${key}_s${i}_r`).value;
+                localStorage.setItem(`${key}_s${i}_w`, w);
+                localStorage.setItem(`${key}_s${i}_r`, r);
+            }
+        });
+        alert("SESSION SAVED. See you next time.");
+    }
+
+    // Start
+    switchDay('PullA');
+</script>
+</body>
+</html>
